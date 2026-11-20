@@ -99,6 +99,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem Pre-create pymod output directories so parallel jom QMAKE_POST_LINK steps
+rem do not race on "if not exist ...\pymod\klayout mkdir ...\pymod\klayout".
+for %%D in (klayout klayout\db klayout\pex klayout\tl klayout\rdb klayout\lib klayout\lay klayout\pya pya) do (
+    if not exist "%BUILD_DIR%\pymod\%%D" mkdir "%BUILD_DIR%\pymod\%%D"
+)
+
 where jom >nul 2>&1
 if %errorlevel% equ 0 (
     jom /J%CPU_COUNT%
@@ -153,9 +159,11 @@ if errorlevel 1 exit /b 1
 
 rem Create .bat launcher shims in %LIBRARY_BIN% pointing to executables in
 rem %KLAYOUT_DIR% (avoids symlink permission issues on Windows and preserves
-rem inst_path() == ...\Library\lib\klayout).
+rem inst_path() == ...\Library\lib\klayout). Set KLAYOUT_PYTHONHOME to %PREFIX%
+rem (%~dp0..\..) so KLayout's embedded Python finds the conda env's Lib/ and DLLs/
+rem instead of defaulting to inst_path() (%PREFIX%\Library\lib\klayout).
 if not exist "%LIBRARY_BIN%" mkdir "%LIBRARY_BIN%"
 if errorlevel 1 exit /b 1
 
-"%PYTHON%" -c "import os, pathlib; q, pct, bs, crlf = chr(34), chr(37), chr(92), chr(13) + chr(10); kdir = pathlib.Path(os.environ['KLAYOUT_DIR']); lbin = pathlib.Path(os.environ['LIBRARY_BIN']); exes = sorted(kdir.glob('*.exe')); assert exes, f'No .exe found in {kdir}'; mk = lambda name: f'@echo off{crlf}{q}{pct}~dp0..{bs}lib{bs}klayout{bs}{name}{q} {pct}*{crlf}'.encode('ascii'); [(lbin / f'{e.stem}.bat').write_bytes(mk(e.name)) for e in exes]; app = kdir / 'klayout_app.exe'; (lbin / 'klayout.bat').write_bytes(mk('klayout_app.exe')) if app.is_file() and not (lbin / 'klayout.bat').exists() else None"
+"%PYTHON%" -c "import os, pathlib; q, pct, bs, crlf = chr(34), chr(37), chr(92), chr(13) + chr(10); kdir = pathlib.Path(os.environ['KLAYOUT_DIR']); lbin = pathlib.Path(os.environ['LIBRARY_BIN']); exes = sorted(kdir.glob('*.exe')); assert exes, f'No .exe found in {kdir}'; mk = lambda name: crlf.join(['@echo off', 'setlocal', f'if not defined KLAYOUT_PYTHONHOME for {pct}{pct}I in ({q}{pct}~dp0..{bs}..{q}) do set {q}KLAYOUT_PYTHONHOME={pct}{pct}~fI{q}', f'{q}{pct}~dp0..{bs}lib{bs}klayout{bs}{name}{q} {pct}*', f'exit /b {pct}errorlevel{pct}', '']).encode('ascii'); [(lbin / f'{e.stem}.bat').write_bytes(mk(e.name)) for e in exes]; app = kdir / 'klayout_app.exe'; (lbin / 'klayout.bat').write_bytes(mk('klayout_app.exe')) if app.is_file() and not (lbin / 'klayout.bat').exists() else None"
 if errorlevel 1 exit /b 1
