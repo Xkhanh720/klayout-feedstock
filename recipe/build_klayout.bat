@@ -70,6 +70,9 @@ if errorlevel 1 exit /b 1
     -spec win32-msvc ^
     -recursive ^
     "CONFIG+=release" ^
+    "CONFIG+=c++20" ^
+    "HAVE_CPP20=1" ^
+    "QMAKE_CXXFLAGS+=/std:c++20" ^
     "PREFIX=%KLAYOUT_DIR_FWD%" ^
     "KLAYOUT_VERSION=%PKG_VERSION%" ^
     "KLAYOUT_VERSION_DATE=unknown" ^
@@ -103,7 +106,7 @@ if %errorlevel% equ 0 (
         popd
         exit /b 1
     )
-    jom install
+    jom /J1 install
     if errorlevel 1 (
         popd
         exit /b 1
