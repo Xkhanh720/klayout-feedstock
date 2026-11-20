@@ -57,7 +57,7 @@ rem which MSVC resolves as curl.lib, expat.lib, png.lib, etc., whereas conda-for
 rem ships libcurl.lib, libexpat.lib, libpng16.lib, zlib.lib, git2.lib.
 rem Create build-time import-library aliases outside %PREFIX% so MSVC links
 rem cleanly against the real conda-forge DLLs without polluting the package.
-"%PYTHON%" -c "import os, pathlib, shutil; lib = pathlib.Path(os.environ['LIBRARY_LIB']); dst = pathlib.Path(os.environ['LIB_ALIAS_DIR']); dst.mkdir(parents=True, exist_ok=True); mapping = {'curl.lib': ('libcurl.lib', 'libcurl_imp.lib'), 'expat.lib': ('libexpat.lib', 'libexpatMD.lib'), 'png.lib': ('libpng16.lib', 'libpng.lib', 'png16.lib'), 'z.lib': ('zlib.lib', 'zdll.lib'), 'zlib.lib': ('z.lib', 'zdll.lib'), 'git2.lib': ('libgit2.lib',), 'libgit2.lib': ('git2.lib',)}; [print(f'Alias {k} -> {h}') or shutil.copyfile(lib / h, dst / k) for k, cands in mapping.items() if not (lib / k).is_file() for h in [next((c for c in cands if (lib / c).is_file()), None)] if h]"
+"%PYTHON%" -c "import os, pathlib, shutil; lib = pathlib.Path(os.environ['LIBRARY_LIB']); dst = pathlib.Path(os.environ['LIB_ALIAS_DIR']); dst.mkdir(parents=True, exist_ok=True); mapping = {'curl.lib': ('libcurl.lib', 'libcurl_imp.lib'), 'expat.lib': ('libexpat.lib', 'libexpatMD.lib'), 'png.lib': ('libpng16.lib', 'libpng.lib', 'png16.lib'), 'z.lib': ('zlib.lib', 'zdll.lib'), 'zlib.lib': ('z.lib', 'zdll.lib'), 'git2.lib': ('libgit2.lib',), 'libgit2.lib': ('git2.lib',)}; print('Host libs:', sorted(p.name for p in lib.glob('*.lib') if any(t in p.name.lower() for t in ('curl', 'expat', 'png', 'zlib', 'zdll', 'git2')) or p.name.lower() == 'z.lib')); [print(f'Alias {k} -> {h}') or shutil.copyfile(lib / h, dst / k) for k, cands in mapping.items() if not (lib / k).is_file() for h in [next((c for c in cands if (lib / c).is_file()), None)] if h]"
 if errorlevel 1 exit /b 1
 
 set "INCLUDE=%LIBRARY_INC%;%INCLUDE%"
@@ -88,6 +88,8 @@ if errorlevel 1 exit /b 1
     "INCLUDEPATH+=%LIB_INC_FWD%" ^
     "LIBS+=-L%LIB_ALIAS_FWD%" ^
     "LIBS+=-L%LIB_LIB_FWD%" ^
+    "LIBS+=-lzlib" ^
+    "LIBS+=-lpng" ^
     "%SRC_DIR_FWD%/src/klayout.pro"
 if errorlevel 1 (
     popd
