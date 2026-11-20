@@ -17,6 +17,7 @@ if "%CPU_COUNT%"=="" set "CPU_COUNT=2"
 
 set "KLAYOUT_DIR=%LIBRARY_PREFIX%\lib\klayout"
 set "BUILD_DIR=%SRC_DIR%\build-release"
+set "LIB_ALIAS_DIR=%BUILD_DIR%\lib-aliases"
 
 rem Locate qmake6 from conda-forge's qt6-main package.
 set "QMAKE="
@@ -37,7 +38,7 @@ echo Using QMAKE=%QMAKE%
 
 rem Compute Python build paths and normalize backslashes to forward slashes
 rem for qmake (backslashes in qmake assignments can be treated as escapes).
-"%PYTHON%" -c "import os, sys, sysconfig; v = f'{sys.version_info.major}{sys.version_info.minor}'; py_lib = os.path.join(sys.base_prefix, 'libs', f'python{v}.lib'); norm = lambda p: p.replace(chr(92), '/'); q = chr(34); env = {'PY_EXE_FWD': norm(sys.executable), 'PY_INC_FWD': norm(sysconfig.get_path('include')), 'PY_LIB_WIN': py_lib, 'PY_LIB_FWD': norm(py_lib), 'PY_EXT': sysconfig.get_config_var('EXT_SUFFIX') or '.pyd', 'KLAYOUT_DIR_FWD': norm(os.environ['KLAYOUT_DIR']), 'LIB_INC_FWD': norm(os.environ['LIBRARY_INC']), 'LIB_LIB_FWD': norm(os.environ['LIBRARY_LIB']), 'SRC_DIR_FWD': norm(os.environ['SRC_DIR'])}; open('_klayout_env.bat', 'w').writelines(f'set {q}{k}={val}{q}\n' for k, val in env.items())"
+"%PYTHON%" -c "import os, sys, sysconfig; v = f'{sys.version_info.major}{sys.version_info.minor}'; py_lib = os.path.join(sys.base_prefix, 'libs', f'python{v}.lib'); norm = lambda p: p.replace(chr(92), '/'); q = chr(34); env = {'PY_EXE_FWD': norm(sys.executable), 'PY_INC_FWD': norm(sysconfig.get_path('include')), 'PY_LIB_WIN': py_lib, 'PY_LIB_FWD': norm(py_lib), 'PY_EXT': sysconfig.get_config_var('EXT_SUFFIX') or '.pyd', 'KLAYOUT_DIR_FWD': norm(os.environ['KLAYOUT_DIR']), 'LIB_INC_FWD': norm(os.environ['LIBRARY_INC']), 'LIB_LIB_FWD': norm(os.environ['LIBRARY_LIB']), 'LIB_ALIAS_FWD': norm(os.environ['LIB_ALIAS_DIR']), 'SRC_DIR_FWD': norm(os.environ['SRC_DIR'])}; open('_klayout_env.bat', 'w').writelines(f'set {q}{k}={val}{q}\n' for k, val in env.items())"
 if errorlevel 1 exit /b 1
 call _klayout_env.bat
 if errorlevel 1 exit /b 1
@@ -50,6 +51,17 @@ if not exist "%PY_LIB_WIN%" (
 
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 if errorlevel 1 exit /b 1
+
+rem KLayout's qmake files link Unix-style short names (curl, expat, png, z, git2),
+rem which MSVC resolves as curl.lib, expat.lib, png.lib, etc., whereas conda-forge
+rem ships libcurl.lib, libexpat.lib, libpng16.lib, zlib.lib, git2.lib.
+rem Create build-time import-library aliases outside %PREFIX% so MSVC links
+rem cleanly against the real conda-forge DLLs without polluting the package.
+"%PYTHON%" -c "import os, pathlib, shutil; lib = pathlib.Path(os.environ['LIBRARY_LIB']); dst = pathlib.Path(os.environ['LIB_ALIAS_DIR']); dst.mkdir(parents=True, exist_ok=True); mapping = {'curl.lib': ('libcurl.lib', 'libcurl_imp.lib'), 'expat.lib': ('libexpat.lib', 'libexpatMD.lib'), 'png.lib': ('libpng16.lib', 'libpng.lib', 'png16.lib'), 'z.lib': ('zlib.lib', 'zdll.lib'), 'zlib.lib': ('z.lib', 'zdll.lib'), 'git2.lib': ('libgit2.lib',), 'libgit2.lib': ('git2.lib',)}; [print(f'Alias {k} -> {h}') or shutil.copyfile(lib / h, dst / k) for k, cands in mapping.items() if not (lib / k).is_file() for h in [next((c for c in cands if (lib / c).is_file()), None)] if h]"
+if errorlevel 1 exit /b 1
+
+set "INCLUDE=%LIBRARY_INC%;%INCLUDE%"
+set "LIB=%LIB_ALIAS_DIR%;%LIBRARY_LIB%;%LIB%"
 
 pushd "%BUILD_DIR%"
 if errorlevel 1 exit /b 1
@@ -74,6 +86,7 @@ if errorlevel 1 exit /b 1
     "HAVE_EXPAT=1" ^
     "HAVE_GIT2=1" ^
     "INCLUDEPATH+=%LIB_INC_FWD%" ^
+    "LIBS+=-L%LIB_ALIAS_FWD%" ^
     "LIBS+=-L%LIB_LIB_FWD%" ^
     "%SRC_DIR_FWD%/src/klayout.pro"
 if errorlevel 1 (
